@@ -1,6 +1,8 @@
-import chalk from 'chalk';
-import { AIPlayer } from '../ai/player.js';
-import { formatSeerHistory } from '../ai/prompts.js';
+import chalk from 'chalk'
+import {AIPlayer} from '../ai/player.js'
+import {formatSeerHistory} from '../ai/prompts.js'
+import {DeepSeekProvider} from '../providers/deepseek.js'
+import {GameRecorder} from '../recorder.js'
 import {
   Faction,
   GameState,
@@ -10,76 +12,79 @@ import {
   ROLE_FACTION,
   ROLE_LABEL_CN,
   Role,
-} from './types.js';
-import { DeepSeekProvider } from '../providers/deepseek.js';
+} from './types.js'
 
-const SPEECH_MAX_CHARS = 80;
+const SPEECH_MAX_CHARS = 80
 
 export interface GameMasterOpts {
   players: PlayerState[];
   provider: DeepSeekProvider;
   verbose?: boolean;
+  recorder?: GameRecorder;
 }
 
 export class GameMaster {
-  state: GameState;
-  agents = new Map<PlayerId, AIPlayer>();
-  private verbose: boolean;
+  state: GameState
+  agents = new Map<PlayerId, AIPlayer>()
+  private verbose: boolean
+  private recorder?: GameRecorder
 
   constructor(opts: GameMasterOpts) {
-    this.verbose = opts.verbose ?? true;
+    this.verbose = opts.verbose ?? true
+    this.recorder = opts.recorder
+    this.recorder?.start(opts.players)
     this.state = {
       day: 0,
-      phase: { kind: 'night-wolves' },
-      players: opts.players.map((p) => ({ ...p })),
+      phase: {kind: 'night-wolves'},
+      players: opts.players.map((p) => ({...p})),
       seerChecks: [],
-      witchPotions: { heal: true, poison: true },
+      witchPotions: {heal: true, poison: true},
       publicLog: [],
-    };
+    }
     for (const p of this.state.players) {
-      this.agents.set(p.id, new AIPlayer(p, opts.provider));
+      this.agents.set(p.id, new AIPlayer(p, opts.provider))
     }
   }
 
   private alive(): PlayerState[] {
-    return this.state.players.filter((p) => p.alive);
+    return this.state.players.filter((p) => p.alive)
   }
 
   private aliveByRole(role: Role): PlayerState[] {
-    return this.alive().filter((p) => p.role === role);
+    return this.alive().filter((p) => p.role === role)
   }
 
   private byId(id: PlayerId): PlayerState {
-    const p = this.state.players.find((x) => x.id === id);
-    if (!p) throw new Error(`Player ${id} not found`);
-    return p;
+    const p = this.state.players.find((x) => x.id === id)
+    if (!p) throw new Error(`Player ${id} not found`)
+    return p
   }
 
   private agent(id: PlayerId): AIPlayer {
-    const a = this.agents.get(id);
-    if (!a) throw new Error(`Agent ${id} not found`);
-    return a;
+    const a = this.agents.get(id)
+    if (!a) throw new Error(`Agent ${id} not found`)
+    return a
   }
 
   private logPublic(ev: PublicEvent) {
-    this.state.publicLog.push(ev);
+    this.state.publicLog.push(ev)
   }
 
   private renderPublicHistory(sinceDay?: number): string {
-    const lines: string[] = [];
+    const lines: string[] = []
     for (const ev of this.state.publicLog) {
-      if (sinceDay !== undefined && ev.day < sinceDay) continue;
+      if (sinceDay !== undefined && ev.day < sinceDay) continue
       switch (ev.type) {
         case 'phase':
-          lines.push(`【第 ${ev.day} 天 ${this.phaseLabel(ev.phase)}】`);
-          break;
+          lines.push(`【第 ${ev.day} 天 ${this.phaseLabel(ev.phase)}】`)
+          break
         case 'speak': {
-          const p = this.byId(ev.speaker);
-          lines.push(`${p.id}号(${p.name})：${ev.text}`);
-          break;
+          const p = this.byId(ev.speaker)
+          lines.push(`${p.id}号(${p.name})：${ev.text}`)
+          break
         }
         case 'death': {
-          const p = this.byId(ev.victim);
+          const p = this.byId(ev.victim)
           const reason =
             ev.reason === 'wolves'
               ? '昨夜倒牌'
@@ -87,221 +92,322 @@ export class GameMaster {
                 ? '被投票出局'
                 : ev.reason === 'poison'
                   ? '昨夜被毒'
-                  : '被猎人开枪带走';
-          lines.push(`系统：${p.id}号(${p.name}) ${reason}。`);
-          break;
+                  : '被猎人开枪带走'
+          lines.push(`系统：${p.id}号(${p.name}) ${reason}。`)
+          break
         }
         case 'vote': {
-          const v = this.byId(ev.voter);
-          const t = this.byId(ev.target);
-          lines.push(`${v.id}号 → ${t.id}号`);
-          break;
+          const v = this.byId(ev.voter)
+          const t = this.byId(ev.target)
+          lines.push(`${v.id}号 → ${t.id}号`)
+          break
         }
+        case 'announce':
+          lines.push(`系统：${ev.text}`)
+          break
       }
     }
-    return lines.join('\n');
+    return lines.join('\n')
   }
 
   private phaseLabel(kind: string): string {
     switch (kind) {
       case 'night-wolves':
-        return '夜晚-狼人行动';
+        return '夜晚-狼人行动'
       case 'night-seer':
-        return '夜晚-预言家查验';
+        return '夜晚-预言家查验'
       case 'night-witch':
-        return '夜晚-女巫行动';
+        return '夜晚-女巫行动'
       case 'day-announce':
-        return '白天-公告';
+        return '白天-公告'
       case 'day-discuss':
-        return '白天-讨论';
+        return '白天-讨论'
       case 'day-vote':
-        return '白天-投票';
+        return '白天-投票'
       case 'day-execute':
-        return '白天-处决';
+        return '白天-处决'
       default:
-        return kind;
+        return kind
     }
   }
 
   private privateInfoFor(id: PlayerId): string {
-    const me = this.byId(id);
-    const lines: string[] = [`你的身份：${ROLE_LABEL_CN[me.role]}。`];
+    const me = this.byId(id)
+    const lines: string[] = [`你的身份：${ROLE_LABEL_CN[me.role]}。`]
     if (me.role === 'werewolf') {
       const teammates = this.state.players
         .filter((p) => p.role === 'werewolf' && p.id !== id)
-        .map((p) => `${p.id}号(${p.name})`);
-      lines.push(`你的狼队友：${teammates.join('、') || '无'}。`);
+        .map((p) => `${p.id}号(${p.name})`)
+      lines.push(`你的狼队友：${teammates.join('、') || '无'}。`)
     }
     if (me.role === 'seer' && this.state.seerChecks.length > 0) {
-      lines.push(`查验记录：${formatSeerHistory(this.state.seerChecks, this.state.players)}`);
+      lines.push(`查验记录：${formatSeerHistory(this.state.seerChecks, this.state.players)}`)
     }
     if (me.role === 'witch') {
       lines.push(
         `药剂状态：解药${this.state.witchPotions.heal ? '可用' : '已用'}，毒药${this.state.witchPotions.poison ? '可用' : '已用'}。`,
-      );
+      )
     }
-    return lines.join('\n');
+    return lines.join('\n')
   }
 
-  private justSaved = new Set<PlayerId>();
+  private justSaved = new Set<PlayerId>()
 
   private checkWinner(): Faction | null {
-    const aliveWolves = this.aliveByRole('werewolf').length;
+    const aliveWolves = this.aliveByRole('werewolf').length
     const aliveVillagers = this.alive().filter(
       (p) => ROLE_FACTION[p.role] === 'villagers',
-    ).length;
-    if (aliveWolves === 0) return 'villagers';
-    if (aliveWolves >= aliveVillagers) return 'wolves';
-    return null;
+    ).length
+    if (aliveWolves === 0) return 'villagers'
+    if (aliveWolves >= aliveVillagers) return 'wolves'
+    return null
   }
 
   async run(maxDays = 8): Promise<Faction> {
     while (this.state.day < maxDays) {
-      this.state.day += 1;
-      const day = this.state.day;
-      if (this.verbose) console.log(chalk.bgBlue.white(`\n========== 第 ${day} 天 ==========`));
+      this.state.day += 1
+      const day = this.state.day
+      if (this.verbose) console.log(chalk.bgBlue.white(`\n========== 第 ${day} 天 ==========`))
+      this.recorder?.dayHeader(day)
+      this.recorder?.nightSection()
 
-      const killedTonight = await this.runWolvesPhase();
-      await this.runSeerPhase();
-      const poisoned = await this.runWitchPhase(killedTonight);
+      const killedTonight = await this.runWolvesPhase()
+      await this.runSeerPhase()
+      const poisoned = await this.runWitchPhase(killedTonight)
 
-      const deaths: PlayerId[] = [];
-      if (killedTonight !== null && !this.justSaved.has(killedTonight)) {
-        this.byId(killedTonight).alive = false;
-        deaths.push(killedTonight);
-        this.logPublic({ type: 'death', day, victim: killedTonight, reason: 'wolves' });
+      const deaths: PlayerId[] = []
+      const killedByWolves = killedTonight !== null && !this.justSaved.has(killedTonight) ? killedTonight : null
+      if (killedByWolves !== null) {
+        this.byId(killedByWolves).alive = false
+        deaths.push(killedByWolves)
+        this.logPublic({type: 'death', day, victim: killedByWolves, reason: 'wolves'})
       }
       if (poisoned !== null) {
-        this.byId(poisoned).alive = false;
-        deaths.push(poisoned);
-        this.logPublic({ type: 'death', day, victim: poisoned, reason: 'poison' });
+        this.byId(poisoned).alive = false
+        deaths.push(poisoned)
+        this.logPublic({type: 'death', day, victim: poisoned, reason: 'poison'})
       }
-      this.justSaved.clear();
+      if (killedByWolves !== null) {
+        const shot = await this.maybeHunterShoot(killedByWolves)
+        if (shot !== null) {
+          this.byId(shot).alive = false
+          deaths.push(shot)
+          this.logPublic({type: 'death', day, victim: shot, reason: 'hunter'})
+        }
+      }
+      this.justSaved.clear()
+
+      if (deaths.length === 0) {
+        this.logPublic({type: 'announce', day, text: `第 ${day} 天，昨夜平安夜。`})
+      }
 
       if (this.verbose) {
-        console.log(chalk.cyan(`\n[第 ${day} 天 白天]`));
-        if (deaths.length === 0) console.log(chalk.green('  平安夜！'));
+        console.log(chalk.cyan(`\n[第 ${day} 天 白天]`))
+        if (deaths.length === 0) console.log(chalk.green('  平安夜！'))
         else
           deaths.forEach((id) => {
-            const p = this.byId(id);
-            console.log(chalk.red(`  ${p.id}号(${p.name}) 出局`));
-          });
+            const p = this.byId(id)
+            console.log(chalk.red(`  ${p.id}号(${p.name}) 出局`))
+          })
       }
+      this.recorder?.deaths(
+        day,
+        deaths.map((id) => {
+          const ev = [...this.state.publicLog].reverse().find(
+            (e): e is Extract<PublicEvent, {type: 'death'}> =>
+              e.type === 'death' && e.day === day && e.victim === id,
+          )
+          return {id, reason: ev?.reason ?? 'wolves'}
+        }),
+      )
 
-      let winner = this.checkWinner();
-      if (winner) return this.endGame(winner);
+      let winner = this.checkWinner()
+      if (winner) return this.endGame(winner)
 
-      await this.runDiscussPhase();
-      const executed = await this.runVotePhase();
+      await this.runDiscussPhase()
+      const executed = await this.runVotePhase()
       if (executed !== null) {
-        this.byId(executed).alive = false;
-        this.logPublic({ type: 'death', day, victim: executed, reason: 'vote' });
+        this.byId(executed).alive = false
+        this.logPublic({type: 'death', day, victim: executed, reason: 'vote'})
         if (this.verbose) {
-          const p = this.byId(executed);
-          console.log(chalk.red(`\n  ${p.id}号(${p.name}) 被投票出局`));
+          const p = this.byId(executed)
+          console.log(chalk.red(`\n  ${p.id}号(${p.name}) 被投票出局`))
+        }
+        this.recorder?.deaths(day, [{id: executed, reason: 'vote'}])
+        const shot = await this.maybeHunterShoot(executed)
+        if (shot !== null) {
+          this.byId(shot).alive = false
+          this.logPublic({type: 'death', day, victim: shot, reason: 'hunter'})
+          this.recorder?.deaths(day, [{id: shot, reason: 'hunter'}])
         }
       }
 
-      winner = this.checkWinner();
-      if (winner) return this.endGame(winner);
+      winner = this.checkWinner()
+      if (winner) return this.endGame(winner)
     }
-    return this.endGame('wolves');
+    return this.endGame('wolves')
   }
 
   private async runWolvesPhase(): Promise<PlayerId | null> {
-    const wolves = this.aliveByRole('werewolf');
-    if (wolves.length === 0) return null;
-    if (this.verbose) console.log(chalk.gray('\n[夜晚] 狼人行动中...'));
+    const wolves = this.aliveByRole('werewolf')
+    if (wolves.length === 0) return null
+    if (this.verbose) console.log(chalk.gray('\n[夜晚] 狼人行动中...'))
 
-    const proposals: PlayerId[] = [];
-    const candidates = this.alive().filter((p) => p.role !== 'werewolf');
+    const candidates = this.alive().filter((p) => p.role !== 'werewolf')
+    const publicHistory = this.renderPublicHistory()
 
+    interface WolfProposal {
+      wolfId: PlayerId;
+      choice: PlayerId | null;
+      thinking: string;
+    }
+
+    const proposals: WolfProposal[] = []
+    const wolfFinals: WolfProposal[] = []
     for (const w of wolves) {
       const out = await this.agent(w.id).chooseTarget({
         candidates,
-        instruction: '请选择今晚要刀杀的目标。优先考虑神职（预言家/女巫/猎人）或发言强势的好人。',
+        instruction: [
+          '【狼队第一轮商议】请提议今晚要刀杀的目标，并给出理由。',
+          '优先考虑神职（预言家/女巫/猎人）或发言强势的好人。',
+          '稍后你会看到狼队友的提议，可以再做最终决策。',
+          publicHistory
+            ? `\n【全场公开历史】\n${publicHistory}`
+            : '',
+        ].join('\n'),
         privateInfo: this.privateInfoFor(w.id),
         day: this.state.day,
-      });
-      if (out.choice !== null) proposals.push(out.choice);
+      })
+      proposals.push({wolfId: w.id, choice: out.choice, thinking: out.thinking})
       if (this.verbose)
         console.log(
-          chalk.dim(`  狼${w.id}号 提议刀 ${out.choice ?? '?'}号  «${(out.thinking || '').slice(0, 60)}»`),
-        );
+          chalk.dim(`  [一轮] 狼${w.id}号 提议刀 ${out.choice ?? '?'}号  «${(out.thinking || '').slice(0, 60)}»`),
+        )
     }
 
-    if (proposals.length === 0) return null;
-    const counts = new Map<PlayerId, number>();
-    proposals.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1));
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    const target = sorted[0]![0];
-    if (this.verbose) console.log(chalk.dim(`  → 最终刀杀目标：${target}号`));
-    return target;
+    this.recorder?.wolfRound1(proposals)
+
+    if (wolves.length === 1) {
+      const sole = proposals[0]?.choice ?? null
+      if (sole !== null && this.verbose) console.log(chalk.dim(`  → 最终刀杀目标：${sole}号`))
+      this.recorder?.wolfFinal([], sole)
+      return sole
+    }
+
+    const finalVotes: PlayerId[] = []
+    for (const w of wolves) {
+      const others = proposals.filter((p) => p.wolfId !== w.id)
+      const teammateInfo = others
+        .map(
+          (p) =>
+            `  狼${p.wolfId}号 提议刀 ${p.choice ?? '?'}号 — 理由：${(p.thinking || '').slice(0, 120)}`,
+        )
+        .join('\n')
+      const out = await this.agent(w.id).chooseTarget({
+        candidates,
+        instruction: [
+          '【狼队第二轮商议 - 最终投票】你已看到所有狼队友的提议。',
+          '请综合所有狼队意见，做出最终选择。可以坚持原选择，也可以改投。',
+          '建议狼队尽量集中票，避免一刀都打不中。',
+          '',
+          '【狼队第一轮提议】',
+          teammateInfo,
+          publicHistory ? `\n【全场公开历史】\n${publicHistory}` : '',
+        ].join('\n'),
+        privateInfo: this.privateInfoFor(w.id),
+        day: this.state.day,
+      })
+      if (out.choice !== null) finalVotes.push(out.choice)
+      wolfFinals.push({wolfId: w.id, choice: out.choice, thinking: out.thinking})
+      if (this.verbose)
+        console.log(
+          chalk.dim(`  [二轮] 狼${w.id}号 终投 ${out.choice ?? '?'}号  «${(out.thinking || '').slice(0, 60)}»`),
+        )
+    }
+
+    if (finalVotes.length === 0) {
+      this.recorder?.wolfFinal(wolfFinals, null)
+      return null
+    }
+    const counts = new Map<PlayerId, number>()
+    finalVotes.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1))
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const target = sorted[0]![0]
+    if (this.verbose) console.log(chalk.dim(`  → 最终刀杀目标：${target}号`))
+    this.recorder?.wolfFinal(wolfFinals, target)
+    return target
   }
 
   private async runSeerPhase(): Promise<void> {
-    const seer = this.aliveByRole('seer')[0];
-    if (!seer) return;
-    if (this.verbose) console.log(chalk.gray('\n[夜晚] 预言家查验中...'));
-    const candidates = this.alive().filter((p) => p.id !== seer.id);
+    const seer = this.aliveByRole('seer')[0]
+    if (!seer) return
+    if (this.verbose) console.log(chalk.gray('\n[夜晚] 预言家查验中...'))
+    const candidates = this.alive().filter((p) => p.id !== seer.id)
     const out = await this.agent(seer.id).chooseTarget({
       candidates,
       instruction: '请选择今晚查验的目标。',
       privateInfo: this.privateInfoFor(seer.id),
       day: this.state.day,
-    });
+    })
     if (out.choice !== null) {
-      const target = this.byId(out.choice);
+      const target = this.byId(out.choice)
       this.state.seerChecks.push({
         day: this.state.day,
         target: target.id,
         result: ROLE_FACTION[target.role],
-      });
+      })
       if (this.verbose)
-        console.log(chalk.dim(`  预言家查验 ${target.id}号 → ${ROLE_FACTION[target.role] === 'wolves' ? '查杀' : '金水'}`));
+        console.log(chalk.dim(`  预言家查验 ${target.id}号 → ${ROLE_FACTION[target.role] === 'wolves' ? '查杀' : '金水'}`))
+      this.recorder?.seerCheck(seer.id, target.id, ROLE_FACTION[target.role])
     }
   }
 
   private async runWitchPhase(killedTonight: PlayerId | null): Promise<PlayerId | null> {
-    const witch = this.aliveByRole('witch')[0];
-    if (!witch) return null;
-    if (this.verbose) console.log(chalk.gray('\n[夜晚] 女巫行动中...'));
+    const witch = this.aliveByRole('witch')[0]
+    if (!witch) return null
+    if (this.verbose) console.log(chalk.gray('\n[夜晚] 女巫行动中...'))
 
     if (killedTonight !== null && this.state.witchPotions.heal && killedTonight !== witch.id) {
       const dec = await this.agent(witch.id).witchSaveDecision({
         killedTonight: this.byId(killedTonight),
         privateInfo: this.privateInfoFor(witch.id),
         day: this.state.day,
-      });
+      })
       if (dec.choice) {
-        this.state.witchPotions.heal = false;
-        this.justSaved.add(killedTonight);
-        if (this.verbose) console.log(chalk.dim(`  女巫使用解药救 ${killedTonight}号`));
+        this.state.witchPotions.heal = false
+        this.justSaved.add(killedTonight)
+        if (this.verbose) console.log(chalk.dim(`  女巫使用解药救 ${killedTonight}号`))
+        this.recorder?.witchSave(true, killedTonight)
+      } else {
+        this.recorder?.witchSave(false, killedTonight)
       }
     }
 
     if (this.state.witchPotions.poison && this.state.day >= 1) {
-      const candidates = this.alive().filter((p) => p.id !== witch.id);
+      const candidates = this.alive().filter((p) => p.id !== witch.id)
       const out = await this.agent(witch.id).chooseTarget({
         candidates,
         instruction: '是否使用毒药毒杀一名玩家？毒药只剩一瓶，可以选择不用。如果不毒输出 TARGET: none。',
         privateInfo: this.privateInfoFor(witch.id),
         allowSkip: true,
         day: this.state.day,
-      });
+      })
       if (out.choice !== null) {
-        this.state.witchPotions.poison = false;
-        if (this.verbose) console.log(chalk.dim(`  女巫使用毒药毒 ${out.choice}号`));
-        return out.choice;
+        this.state.witchPotions.poison = false
+        if (this.verbose) console.log(chalk.dim(`  女巫使用毒药毒 ${out.choice}号`))
+        this.recorder?.witchPoison(out.choice)
+        return out.choice
       }
+      this.recorder?.witchPoison(null)
     }
-    return null;
+    return null
   }
 
   private async runDiscussPhase(): Promise<void> {
-    const day = this.state.day;
-    this.logPublic({ type: 'phase', day, phase: 'day-discuss' });
-    if (this.verbose) console.log(chalk.cyan('\n[白天] 讨论开始'));
+    const day = this.state.day
+    this.logPublic({type: 'phase', day, phase: 'day-discuss'})
+    if (this.verbose) console.log(chalk.cyan('\n[白天] 讨论开始'))
+    this.recorder?.discussHeader()
     for (const p of this.alive()) {
       const out = await this.agent(p.id).speak({
         alivePlayers: this.alive(),
@@ -310,59 +416,104 @@ export class GameMaster {
         currentDay: day,
         round: 1,
         maxChars: SPEECH_MAX_CHARS,
-      });
-      this.logPublic({ type: 'speak', day, speaker: p.id, text: out.speech });
+      })
+      this.logPublic({type: 'speak', day, speaker: p.id, text: out.speech})
       if (this.verbose) {
         console.log(
           chalk.yellow(`  ${p.id}号(${p.name})`) +
             chalk.dim(` [${ROLE_LABEL_CN[p.role]}]`) +
             ': ' +
             chalk.white(out.speech),
-        );
+        )
       }
+      this.recorder?.speak(p.id, out.thinking, out.speech)
     }
   }
 
   private async runVotePhase(): Promise<PlayerId | null> {
-    const day = this.state.day;
-    if (this.verbose) console.log(chalk.cyan('\n[白天] 投票'));
-    const candidates = this.alive();
-    const counts = new Map<PlayerId, number>();
+    const day = this.state.day
+    if (this.verbose) console.log(chalk.cyan('\n[白天] 投票'))
+    const candidates = this.alive()
+    const counts = new Map<PlayerId, number>()
+    const voteEntries: {voter: PlayerId; target: PlayerId}[] = []
     for (const p of this.alive()) {
       const out = await this.agent(p.id).vote({
         candidates,
         publicHistory: this.renderPublicHistory(day),
         privateInfo: this.privateInfoFor(p.id),
         day,
-      });
-      counts.set(out.choice, (counts.get(out.choice) ?? 0) + 1);
-      this.logPublic({ type: 'vote', day, voter: p.id, target: out.choice });
-      if (this.verbose) console.log(chalk.dim(`  ${p.id}号 → ${out.choice}号`));
+      })
+      counts.set(out.choice, (counts.get(out.choice) ?? 0) + 1)
+      voteEntries.push({voter: p.id, target: out.choice})
+      this.logPublic({type: 'vote', day, voter: p.id, target: out.choice})
+      if (this.verbose) console.log(chalk.dim(`  ${p.id}号 → ${out.choice}号`))
     }
-    if (counts.size === 0) return null;
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    const top = sorted[0]!;
-    const tied = sorted.filter((e) => e[1] === top[1]);
+    if (counts.size === 0) {
+      this.recorder?.votes(day, voteEntries, null)
+      return null
+    }
+    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const top = sorted[0]!
+    const tied = sorted.filter((e) => e[1] === top[1])
     if (tied.length > 1) {
-      if (this.verbose) console.log(chalk.gray('  平票，无人出局'));
-      return null;
+      if (this.verbose) console.log(chalk.gray('  平票，无人出局'))
+      this.recorder?.votes(day, voteEntries, null)
+      return null
     }
-    return top[0];
+    this.recorder?.votes(day, voteEntries, top[0])
+    return top[0]
+  }
+
+  private async maybeHunterShoot(deadId: PlayerId): Promise<PlayerId | null> {
+    const dead = this.byId(deadId)
+    if (dead.role !== 'hunter') return null
+    const candidates = this.alive()
+    if (candidates.length === 0) return null
+    if (this.verbose) console.log(chalk.magenta(`\n[猎人] ${dead.id}号(${dead.name}) 出局，是否开枪？`))
+    const publicHistory = this.renderPublicHistory()
+    const out = await this.agent(deadId).chooseTarget({
+      candidates,
+      instruction: [
+        '你是猎人，刚刚出局！现在是你唯一一次开枪的机会。',
+        '不开枪 = 浪费身份，让狼人白嫖。',
+        '请基于全场发言和投票表现，选出你最怀疑是狼人的玩家开枪带走。',
+        '即使无法完全确认，也要根据当前最大嫌疑出枪。仅在所有玩家都无法判断时才输出 TARGET: none。',
+        '',
+        '【全场公开历史】',
+        publicHistory || '（无）',
+      ].join('\n'),
+      privateInfo: this.privateInfoFor(deadId),
+      allowSkip: true,
+      day: this.state.day,
+    })
+    if (out.choice === null) {
+      if (this.verbose) console.log(chalk.dim('  猎人选择不开枪'))
+      this.recorder?.hunterShoot(deadId, null, out.thinking)
+      return null
+    }
+    const target = this.byId(out.choice)
+    if (this.verbose) console.log(chalk.magenta(`  → 猎人开枪带走 ${target.id}号(${target.name})`))
+    this.recorder?.hunterShoot(deadId, out.choice, out.thinking)
+    return out.choice
+  }
+
+  endGameWithStats(winner: Faction, stats: {calls: number; promptTokens: number; completionTokens: number}): void {
+    this.recorder?.end(winner, this.state.players, stats)
   }
 
   private endGame(winner: Faction): Faction {
-    this.state.phase = { kind: 'game-over', winner };
+    this.state.phase = {kind: 'game-over', winner}
     if (this.verbose) {
       console.log(
         chalk.bgGreen.black(`\n========== 游戏结束：${winner === 'wolves' ? '狼人' : '好人'}阵营胜利 ==========`),
-      );
-      console.log('身份揭晓：');
+      )
+      console.log('身份揭晓：')
       this.state.players.forEach((p) => {
         console.log(
           `  ${p.id}号(${p.name}) - ${ROLE_LABEL_CN[p.role]} ${p.alive ? chalk.green('[存活]') : chalk.red('[出局]')}`,
-        );
-      });
+        )
+      })
     }
-    return winner;
+    return winner
   }
 }
