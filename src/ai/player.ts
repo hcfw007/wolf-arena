@@ -1,5 +1,5 @@
 import {PlayerId, PlayerState, ROLE_LABEL_CN} from '../game/types.js'
-import {DeepSeekProvider} from '../providers/deepseek.js'
+import {LLMProvider} from '../providers/types.js'
 import {clipText, parseSpeech} from './parse.js'
 import {
   buildSpeakSystemPrompt,
@@ -27,7 +27,7 @@ const SAVE_RE = /SAVE\s*[:：]\s*(yes|no|是|否|救|不救)/i
 export class AIPlayer {
   constructor(
     public state: PlayerState,
-    private provider: DeepSeekProvider,
+    private provider: LLMProvider,
   ) {}
 
   async speak(ctx: Omit<SpeakContext, 'self'>): Promise<SpeakOutput> {

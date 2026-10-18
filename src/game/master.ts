@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import {AIPlayer} from '../ai/player.js'
 import {formatSeerHistory} from '../ai/prompts.js'
-import {DeepSeekProvider} from '../providers/deepseek.js'
+import {LLMProvider} from '../providers/types.js'
 import {GameRecorder} from '../recorder.js'
 import {
   Faction,
@@ -18,7 +18,7 @@ const SPEECH_MAX_CHARS = 80
 
 export interface GameMasterOpts {
   players: PlayerState[];
-  provider: DeepSeekProvider;
+  provider: LLMProvider;
   verbose?: boolean;
   recorder?: GameRecorder;
 }
