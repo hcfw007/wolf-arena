@@ -31,6 +31,7 @@ async function runFakeGame() {
 /** 按脚本吐出投票，其余决策固定，用来构造平票。 */
 class ScriptedVoteProvider implements LLMProvider {
   private script: number[]
+  totals = {calls: 0, promptTokens: 0, completionTokens: 0}
 
   constructor(votes: number[]) {
     this.script = [...votes]

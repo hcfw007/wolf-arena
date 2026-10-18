@@ -117,12 +117,12 @@ export class GameRecorder {
     return toMarkdown(this.replay)
   }
 
-  /** 按扩展名选格式：.json / .html，其余当 Markdown。 */
-  save(filePath: string): string {
+  /** 不传 format 时按扩展名猜：.json / .html，其余当 Markdown。 */
+  save(filePath: string, format?: ReplayFormat): string {
     const abs = resolve(filePath)
-    const format = EXT_FORMAT[extname(abs).toLowerCase()] ?? 'md'
+    const chosen = format ?? EXT_FORMAT[extname(abs).toLowerCase()] ?? 'md'
     mkdirSync(dirname(abs), {recursive: true})
-    writeFileSync(abs, this.render(format), 'utf-8')
+    writeFileSync(abs, this.render(chosen), 'utf-8')
     return abs
   }
 

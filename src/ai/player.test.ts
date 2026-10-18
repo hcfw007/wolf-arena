@@ -6,6 +6,7 @@ import {AIPlayer} from './player.js'
 
 function stub(text: string): LLMProvider {
   return {
+    totals: {calls: 0, promptTokens: 0, completionTokens: 0},
     complete: async () => ({text, promptTokens: 0, completionTokens: 0}),
   }
 }

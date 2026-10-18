@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import {AIPlayer} from '../ai/player.js'
 import {formatSeerHistory} from '../ai/prompts.js'
-import {LLMProvider} from '../providers/types.js'
+import {LLMProvider, TokenTotals} from '../providers/types.js'
 import {GameRecorder} from '../recorder.js'
 import {
   DEFAULT_WIN_CONDITION,
@@ -540,7 +540,7 @@ export class GameMaster {
     return out.choice
   }
 
-  endGameWithStats(winner: Faction, stats: {calls: number; promptTokens: number; completionTokens: number}): void {
+  endGameWithStats(winner: Faction, stats: TokenTotals): void {
     this.recorder?.end(winner, this.state.players, stats)
   }
 
