@@ -4,7 +4,7 @@
 
 > 9 个 LLM 互相欺骗、推理、投票的开源狼人杀引擎。
 
-每局让 9 个角色化的 AI 完整玩一局中文狼人杀：狼人夜晚商议刀杀目标、预言家查验、女巫救人毒人、白天发言带节奏、投票出人、猎人开枪反杀。对局结束后输出一份完整的 Markdown 复盘日志，能直接拿去发推/写文章。
+每局让 9 个角色化的 AI 完整玩一局中文狼人杀：狼人夜晚商议刀杀目标、预言家查验、女巫救人毒人、白天发言带节奏、投票出人、平票 PK、猎人开枪反杀。对局结束后输出完整复盘（Markdown / JSON / HTML），能直接拿去发推/写文章。
 
 ## 特性
 
@@ -13,7 +13,9 @@
 - **狼队夜晚两轮商议**：第一轮各自提议，第二轮看到队友理由后投终票，避免三狼盲撞同一目标
 - **隐藏信息严格隔离**：每个 AI 的上下文由 GameMaster 单独维护，预言家查验、女巫药剂状态、狼队友身份只发给该看的人
 - **先思考后发言**：每次决策让 AI 先输出 `<thinking>`（自己的推理），再输出公开发言/投票
-- **完整 Markdown 复盘**：每局自动生成 `logs/game-{时间戳}.md`，含所有 thinking、发言、投票、技能动作
+- **标准屠边胜负**：杀光神职或杀光平民则狼胜，也可用 `--win-condition city` 切成屠城
+- **平票 PK**：平票者各补一轮发言，全体只在他们之间重投，再平票才无人出局
+- **三种复盘格式**：Markdown 发文章、JSON 做数据、HTML 单文件直接分享
 - **轻量**：单局 9 人 ~50-70 次 API 调用，DeepSeek 成本约 0.03-0.05 USD
 
 ## 快速开始
@@ -29,6 +31,24 @@ npm start             # 跑一整局 9 人对战
 ```bash
 npm run smoke         # 两次调用，让狼人和预言家各发一段话
 ```
+
+不想花 API 钱、只想看整局流程跑通：
+
+```bash
+npm start -- --provider fake --days 3 --format all
+```
+
+完整参数用 `npm start -- --help` 查看：
+
+| 参数 | 说明 |
+| --- | --- |
+| `--days <n>` | 最多打几天（默认 8） |
+| `--provider <deepseek\|fake>` | 模型后端；`fake` 不联网不花钱 |
+| `--model` / `--base-url` | 覆盖 DeepSeek 模型名 / 端点 |
+| `--win-condition <edge\|city>` | 屠边（默认，标准 9 人局）或屠城 |
+| `--format <md\|json\|html\|all>` | 复盘导出格式（默认 `md`；`all` 同时导出三种） |
+| `--out <path>` | 输出文件名；`--format all` 时按目录处理 |
+| `--quiet` | 不打印过程，只留结果 |
 
 ## 开发
 
@@ -66,21 +86,28 @@ npm test              # 单元测试 + 用假 provider 跑完整局
 - **格式化输出**：用 `<thinking>/</thinking>` 和 `VOTE: <id>` / `TARGET: <id>` 这类硬格式约束 AI，解析失败会兜底到一个合法选项
 - **发言长度硬限制**：默认 80 字以内，防止 LLM 灌水拖沓
 - **狼队商议**：狼人夜晚走两轮，第二轮看得到队友提议，模拟真实狼队默契
+- **赛制可调**：胜负判定抽成纯函数 `evaluateWinner`，默认屠边，也可切屠城
 
 ## 项目结构
 
 ```
 src/
 ├── cli.ts              # 入口：9 人配置 + 跑完整对局
+├── cli-args.ts         # 命令行参数解析（纯函数，便于单测）
 ├── smoke.ts            # 冒烟测试
-├── recorder.ts         # Markdown 复盘生成器
+├── recorder.ts         # 收集结构化复盘，按格式渲染落盘
 ├── game/
-│   ├── master.ts       # GameMaster：流程控制 / 阶段切换 / 胜负判断
+│   ├── master.ts       # GameMaster：流程控制 / 阶段切换 / 投票与 PK
+│   ├── winner.ts       # evaluateWinner：屠边 / 屠城胜负判定
 │   └── types.ts        # 角色 / 阵营 / 事件类型
 ├── ai/
 │   ├── player.ts       # AIPlayer：speak / vote / chooseTarget / witchSave
 │   ├── prompts.ts      # 角色守则 + 发言 prompt
 │   └── parse.ts        # 输出格式解析
+├── replay/
+│   ├── types.ts        # ReplayData：一份对局记录的结构
+│   ├── markdown.ts     # Markdown 渲染
+│   └── html.ts         # 单文件 HTML 渲染（转义 LLM 输出）
 └── providers/
     ├── types.ts        # LLMProvider 接口：唯一的 provider 契约
     ├── deepseek.ts     # DeepSeek 实现（OpenAI 兼容，429/5xx 自动重试）
@@ -93,6 +120,7 @@ src/
 
 - **换 LLM 提供商**：实现 `src/providers/types.ts` 里的 `LLMProvider`（只有一个 `complete()`），构造时传给 `GameMaster` 即可，参考 `deepseek.ts` / `fake.ts`
 - **换身份分布**：改 `PLAYERS` 数组（保持 1 个预言家 / 1 个女巫 / 1 个猎人 / 3 个狼是均衡的）
+- **改赛制**：`--win-condition edge|city`，或直接改 `src/game/winner.ts`
 - **调强度**：改 `src/ai/prompts.ts` 里的 `ROLE_GUIDE`，让某些角色更激进 / 更保守
 
 ## License
