@@ -420,9 +420,67 @@ export class GameMaster {
     this.state.phase = 'day-vote'
     const day = this.state.day
     if (this.verbose) console.log(chalk.cyan('\n[白天] 投票'))
-    const candidates = this.alive()
+    const {counts, entries} = await this.collectVotes(this.alive())
+    const lead = this.leading(counts)
+    if (lead === null) {
+      this.recorder?.votes(day, entries, null)
+      return null
+    }
+    if (lead.tied.length === 1) {
+      this.recorder?.votes(day, entries, lead.tied[0]!)
+      return lead.tied[0]!
+    }
+    this.recorder?.votes(day, entries, null)
+    if (this.verbose) console.log(chalk.gray(`  平票（${lead.tied.join('、')}号），进入 PK`))
+    return this.runPkPhase(lead.tied)
+  }
+
+  /** 平票 PK：只有平票者发言，全体存活玩家在平票者之间重投；再平票则无人出局。 */
+  private async runPkPhase(tied: PlayerId[]): Promise<PlayerId | null> {
+    const day = this.state.day
+    this.state.phase = 'day-pk'
+    this.logPublic({type: 'phase', day, phase: 'day-pk'})
+    const tiedPlayers = tied.map((id) => this.byId(id))
+    const names = tiedPlayers.map((p) => `${p.id}号`).join('、')
+    if (this.verbose) console.log(chalk.cyan(`\n[白天] 平票 PK：${names}`))
+
+    const note = `本轮是平票 PK：只有 ${names} 发言，发言结束后全体存活玩家只在这几人中重新投票。`
+    for (const p of tiedPlayers) {
+      const out = await this.agent(p.id).speak({
+        alivePlayers: this.alive(),
+        publicHistory: this.renderPublicHistory(),
+        privateInfo: this.privateInfoFor(p.id),
+        currentDay: day,
+        round: 2,
+        maxChars: SPEECH_MAX_CHARS,
+        note,
+      })
+      this.logPublic({type: 'speak', day, speaker: p.id, text: out.speech})
+      if (this.verbose) {
+        console.log(
+          chalk.yellow(`  ${p.id}号(${p.name})`) + chalk.dim(' [PK]') + ': ' + chalk.white(out.speech),
+        )
+      }
+      this.recorder?.pkSpeak(p.id, out.thinking, out.speech)
+    }
+
+    const {counts, entries} = await this.collectVotes(tiedPlayers)
+    const lead = this.leading(counts)
+    if (lead === null || lead.tied.length > 1) {
+      if (this.verbose) console.log(chalk.gray('  PK 后仍然平票，无人出局'))
+      this.recorder?.votes(day, entries, null, 'PK 轮重投')
+      return null
+    }
+    this.recorder?.votes(day, entries, lead.tied[0]!, 'PK 轮重投')
+    return lead.tied[0]!
+  }
+
+  private async collectVotes(
+    candidates: PlayerState[],
+  ): Promise<{counts: Map<PlayerId, number>; entries: {voter: PlayerId; target: PlayerId}[]}> {
+    const day = this.state.day
     const counts = new Map<PlayerId, number>()
-    const voteEntries: {voter: PlayerId; target: PlayerId}[] = []
+    const entries: {voter: PlayerId; target: PlayerId}[] = []
     for (const p of this.alive()) {
       const out = await this.agent(p.id).vote({
         candidates,
@@ -431,24 +489,23 @@ export class GameMaster {
         day,
       })
       counts.set(out.choice, (counts.get(out.choice) ?? 0) + 1)
-      voteEntries.push({voter: p.id, target: out.choice})
+      entries.push({voter: p.id, target: out.choice})
       this.logPublic({type: 'vote', day, voter: p.id, target: out.choice})
       if (this.verbose) console.log(chalk.dim(`  ${p.id}号 → ${out.choice}号`))
     }
-    if (counts.size === 0) {
-      this.recorder?.votes(day, voteEntries, null)
-      return null
-    }
+    return {counts, entries}
+  }
+
+  private leading(counts: Map<PlayerId, number>): {count: number; tied: PlayerId[]} | null {
+    if (counts.size === 0) return null
     const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-    const top = sorted[0]!
-    const tied = sorted.filter((e) => e[1] === top[1])
-    if (tied.length > 1) {
-      if (this.verbose) console.log(chalk.gray('  平票，无人出局'))
-      this.recorder?.votes(day, voteEntries, null)
-      return null
-    }
-    this.recorder?.votes(day, voteEntries, top[0])
-    return top[0]
+    const count = sorted[0]![1]
+    // 平票按编号升序排列，保证 PK 发言顺序确定
+    const tied = sorted
+      .filter((e) => e[1] === count)
+      .map((e) => e[0])
+      .sort((a, b) => a - b)
+    return {count, tied}
   }
 
   private async maybeHunterShoot(deadId: PlayerId): Promise<PlayerId | null> {

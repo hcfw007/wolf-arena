@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
 import {FakeProvider} from '../providers/fake.js'
+import {ChatMessage, CompleteResult, LLMProvider} from '../providers/types.js'
 import {GameMaster} from './master.js'
-import {PlayerState} from './types.js'
+import {PlayerState, PublicEvent} from './types.js'
 
 const SEER_ID = 4
 const WITCH_ID = 5
@@ -25,6 +26,51 @@ async function runFakeGame() {
   const gm = new GameMaster({players: PLAYERS, provider, verbose: false})
   const winner = await gm.run(8)
   return {provider, gm, winner}
+}
+
+/** 按脚本吐出投票，其余决策固定，用来构造平票。 */
+class ScriptedVoteProvider implements LLMProvider {
+  private script: number[]
+
+  constructor(votes: number[]) {
+    this.script = [...votes]
+  }
+
+  async complete(messages: ChatMessage[]): Promise<CompleteResult> {
+    const system = messages[0]?.content ?? ''
+    const user = messages[1]?.content ?? ''
+    return {text: this.reply(system, user), promptTokens: 0, completionTokens: 0}
+  }
+
+  private reply(system: string, user: string): string {
+    if (system.includes('SAVE:')) return '<thinking>x</thinking>\nSAVE: no'
+    if (system.includes('VOTE:')) return `<thinking>x</thinking>\nVOTE: ${this.script.shift() ?? ''}`
+    if (system.includes('TARGET:')) {
+      // allowSkip 的决策（女巫毒药 / 猎人开枪）一律不用，避免干扰票型
+      if (system.includes('none')) return '<thinking>x</thinking>\nTARGET: none'
+      const first = user.match(/(?:候选目标)[:：](\d+)号/)?.[1]
+      return `<thinking>x</thinking>\nTARGET: ${first ?? 'none'}`
+    }
+    return '<thinking>x</thinking>\n<speech>过。</speech>'
+  }
+}
+
+type DeathEvent = Extract<PublicEvent, {type: 'death'}>
+type SpeakEvent = Extract<PublicEvent, {type: 'speak'}>
+type PhaseEvent = Extract<PublicEvent, {type: 'phase'}>
+
+function pkEvents(gm: GameMaster) {
+  const log = gm.state.publicLog
+  const pkAt = log.findIndex((e): e is PhaseEvent => e.type === 'phase' && e.phase === 'day-pk')
+  return {
+    pkAt,
+    pkSpeeches: log
+      .slice(pkAt + 1)
+      .filter((e): e is SpeakEvent => e.type === 'speak')
+      .map((e) => e.speaker),
+    voteDeaths: log.filter((e): e is DeathEvent => e.type === 'death' && e.reason === 'vote').map((e) => e.victim),
+    voteCount: log.filter((e) => e.type === 'vote').length,
+  }
 }
 
 test('整局能跑完：产出合法胜方并进入 game-over', async () => {
@@ -77,4 +123,34 @@ test('信息隔离：私密信息只出现在本人 prompt 里', async () => {
     if (!WOLF_IDS.has(call.selfId)) assert.ok(!call.user.includes('你的狼队友'), '狼队友只能发给狼人')
     if (call.selfId !== WITCH_ID) assert.ok(!call.user.includes('药剂状态'), '药剂状态只能发给女巫')
   }
+})
+
+// 第 1 晚狼刀 4 号（假 provider 固定选第一个候选），女巫不救也不毒，
+// 白天存活 1,2,3,5,6,7,8,9 共 8 人，正好能靠脚本构造 4:4 平票。
+const TIE_ROUND: number[] = [2, 1, 2, 1, 1, 2, 1, 2]
+
+async function runPkGame(pkVotes: number[]) {
+  const provider = new ScriptedVoteProvider([...TIE_ROUND, ...pkVotes])
+  const gm = new GameMaster({players: PLAYERS, provider, verbose: false})
+  await gm.run(1)
+  return gm
+}
+
+test('平票进入 PK：只有平票者发言，重投后决出出局者', async () => {
+  const gm = await runPkGame([2, 1, 1, 1, 1, 1, 1, 1])
+  const {pkAt, pkSpeeches, voteDeaths, voteCount} = pkEvents(gm)
+
+  assert.ok(pkAt >= 0, '应记录 day-pk 阶段')
+  assert.deepEqual(pkSpeeches, [1, 2], 'PK 轮只应有平票的 1、2 号发言')
+  assert.equal(voteCount, 16, '第一轮 8 票 + PK 重投 8 票')
+  assert.deepEqual(voteDeaths, [1], 'PK 重投应把 1 号投出去')
+})
+
+test('PK 后仍然平票则无人出局', async () => {
+  const gm = await runPkGame([...TIE_ROUND])
+  const {pkAt, voteDeaths, voteCount} = pkEvents(gm)
+
+  assert.ok(pkAt >= 0, '应记录 day-pk 阶段')
+  assert.equal(voteCount, 16)
+  assert.deepEqual(voteDeaths, [], '再次平票不应有人出局')
 })

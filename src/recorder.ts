@@ -104,6 +104,11 @@ export class GameRecorder {
     this.push('#### 讨论\n')
   }
 
+  pkSpeak(playerId: PlayerId, thinking: string, speech: string): void {
+    this.push('#### 平票 PK 发言\n')
+    this.speak(playerId, thinking, speech)
+  }
+
   speak(playerId: PlayerId, thinking: string, speech: string): void {
     const p = this.player(playerId)
     this.push(`**${p.id}号(${p.name})** _[${ROLE_LABEL_CN[p.role]}]_`)
@@ -111,8 +116,13 @@ export class GameRecorder {
     this.push(`> 🗣 ${speech}\n`)
   }
 
-  votes(day: number, votes: {voter: PlayerId; target: PlayerId}[], executed: PlayerId | null): void {
-    this.push('#### 投票\n')
+  votes(
+    day: number,
+    votes: {voter: PlayerId; target: PlayerId}[],
+    executed: PlayerId | null,
+    label?: string,
+  ): void {
+    this.push(`#### 投票${label ? `（${label}）` : ''}\n`)
     const counts = new Map<PlayerId, number>()
     for (const v of votes) {
       this.push(`- ${v.voter}号(${this.name(v.voter)}) → ${v.target}号(${this.name(v.target)})`)

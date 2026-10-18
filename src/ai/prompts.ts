@@ -21,6 +21,8 @@ export interface SpeakContext {
   currentDay: number;
   round: number;
   maxChars: number;
+  /** 本轮特殊说明，例如「这是平票 PK，只有你们几人发言」。 */
+  note?: string;
 }
 
 export function buildSpeakSystemPrompt(self: PlayerState): string {
@@ -45,6 +47,7 @@ export function buildSpeakUserPrompt(ctx: SpeakContext): string {
   return [
     `当前是第 ${ctx.currentDay} 天白天，发言轮次 ${ctx.round}。`,
     `存活玩家：${aliveList}。`,
+    ctx.note ? `\n【本轮特殊说明】${ctx.note}` : '',
     '',
     '【公开历史】',
     ctx.publicHistory || '（暂无）',

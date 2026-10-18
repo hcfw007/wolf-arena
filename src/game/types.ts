@@ -55,6 +55,7 @@ export type PhaseKind =
   | 'day-announce'
   | 'day-discuss'
   | 'day-vote'
+  | 'day-pk'
   | 'day-execute'
   | 'hunter-shoot'
   | 'game-over'
@@ -66,6 +67,7 @@ export const PHASE_LABEL_CN: Record<PhaseKind, string> = {
   'day-announce': '白天-公告',
   'day-discuss': '白天-讨论',
   'day-vote': '白天-投票',
+  'day-pk': '白天-平票 PK',
   'day-execute': '白天-处决',
   'hunter-shoot': '猎人开枪',
   'game-over': '对局结束',
