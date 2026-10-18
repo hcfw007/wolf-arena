@@ -1,5 +1,7 @@
 # Wolf Arena
 
+[![CI](https://github.com/hcfw007/wolf-arena/actions/workflows/ci.yml/badge.svg)](https://github.com/hcfw007/wolf-arena/actions/workflows/ci.yml)
+
 > 9 个 LLM 互相欺骗、推理、投票的开源狼人杀引擎。
 
 每局让 9 个角色化的 AI 完整玩一局中文狼人杀：狼人夜晚商议刀杀目标、预言家查验、女巫救人毒人、白天发言带节奏、投票出人、猎人开枪反杀。对局结束后输出一份完整的 Markdown 复盘日志，能直接拿去发推/写文章。
@@ -28,6 +30,16 @@ npm start             # 跑一整局 9 人对战
 npm run smoke         # 两次调用，让狼人和预言家各发一段话
 ```
 
+## 开发
+
+```bash
+npm run typecheck     # tsc --noEmit
+npm run lint          # eslint src
+npm test              # 单元测试 + 用假 provider 跑完整局
+```
+
+`npm test` **不需要 API key、不花钱**：`src/providers/fake.ts` 是个确定性的假 provider，按 prompt 里的候选列表机械选择，用来验证整局流程、解析兜底，以及「私密信息不会泄漏给别的玩家」（见 `src/game/master.test.ts`）。
+
 ## 角色与人设
 
 默认 9 人配置在 `src/cli.ts`，每个 AI 都有自己的性格设定（人设直接喂给系统 prompt），发言会带上方言、口头禅、行业习惯：
@@ -50,6 +62,7 @@ npm run smoke         # 两次调用，让狼人和预言家各发一段话
 
 - **GameMaster 是唯一权威**：所有死亡、查验结果、投票结算都由代码裁定，LLM 不能撒谎说"我没死"
 - **私密信息不泄漏**：渲染 prompt 时只把该玩家应该知道的信息拼进去（自己身份、查验记录、狼队友、药剂状态）
+- **死因不进公开信息**：狼刀和女巫毒杀在玩家眼里都是「倒牌出局」，不可区分；死因只写进复盘日志
 - **格式化输出**：用 `<thinking>/</thinking>` 和 `VOTE: <id>` / `TARGET: <id>` 这类硬格式约束 AI，解析失败会兜底到一个合法选项
 - **发言长度硬限制**：默认 80 字以内，防止 LLM 灌水拖沓
 - **狼队商议**：狼人夜晚走两轮，第二轮看得到队友提议，模拟真实狼队默契
@@ -69,12 +82,16 @@ src/
 │   ├── prompts.ts      # 角色守则 + 发言 prompt
 │   └── parse.ts        # 输出格式解析
 └── providers/
-    └── deepseek.ts     # DeepSeek API wrapper（OpenAI 兼容）
+    ├── types.ts        # LLMProvider 接口：唯一的 provider 契约
+    ├── deepseek.ts     # DeepSeek 实现（OpenAI 兼容，429/5xx 自动重试）
+    └── fake.ts         # 确定性假 provider，离线跑整局 / 测试用
 ```
+
+测试文件与被测模块同目录（`*.test.ts`），由 `npm test` 收集。仓库根目录的 `AGENTS.md` 是给 AI 编码助手看的工程约定。
 
 ## 自定义
 
-- **换 LLM 提供商**：仿照 `src/providers/deepseek.ts` 写一个新 provider，构造时传给 GameMaster 即可
+- **换 LLM 提供商**：实现 `src/providers/types.ts` 里的 `LLMProvider`（只有一个 `complete()`），构造时传给 `GameMaster` 即可，参考 `deepseek.ts` / `fake.ts`
 - **换身份分布**：改 `PLAYERS` 数组（保持 1 个预言家 / 1 个女巫 / 1 个猎人 / 3 个狼是均衡的）
 - **调强度**：改 `src/ai/prompts.ts` 里的 `ROLE_GUIDE`，让某些角色更激进 / 更保守
 
