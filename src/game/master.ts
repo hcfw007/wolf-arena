@@ -85,14 +85,13 @@ export class GameMaster {
         }
         case 'death': {
           const p = this.byId(ev.victim)
+          // 女巫毒杀与狼刀在公开信息里不可区分，死因只写进复盘日志（见 GameRecorder）。
           const reason =
-            ev.reason === 'wolves'
-              ? '昨夜倒牌'
-              : ev.reason === 'vote'
-                ? '被投票出局'
-                : ev.reason === 'poison'
-                  ? '昨夜被毒'
-                  : '被猎人开枪带走'
+            ev.reason === 'vote'
+              ? '被投票出局'
+              : ev.reason === 'hunter'
+                ? '被猎人开枪带走'
+                : '昨夜倒牌出局'
           lines.push(`系统：${p.id}号(${p.name}) ${reason}。`)
           break
         }
