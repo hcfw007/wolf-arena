@@ -4,6 +4,11 @@
   "description": "AI 狼人杀：9 个 LLM 互相欺骗、推理、投票的开源对战引擎",
   "type": "module",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hcfw007/wolf-arena.git"
+  },
   "engines": {
     "node": ">=22"
   },
