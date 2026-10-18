@@ -33,16 +33,28 @@ export interface PlayerState {
   personality: string;
 }
 
-export type Phase =
-  | {kind: 'night-wolves'}
-  | {kind: 'night-seer'}
-  | {kind: 'night-witch'; killedTonight: PlayerId | null}
-  | {kind: 'day-announce'; deaths: PlayerId[]}
-  | {kind: 'day-discuss'; round: number}
-  | {kind: 'day-vote'}
-  | {kind: 'day-execute'; executed: PlayerId | null}
-  | {kind: 'hunter-shoot'; hunterId: PlayerId}
-  | {kind: 'game-over'; winner: Faction}
+export type PhaseKind =
+  | 'night-wolves'
+  | 'night-seer'
+  | 'night-witch'
+  | 'day-announce'
+  | 'day-discuss'
+  | 'day-vote'
+  | 'day-execute'
+  | 'hunter-shoot'
+  | 'game-over'
+
+export const PHASE_LABEL_CN: Record<PhaseKind, string> = {
+  'night-wolves': '夜晚-狼人行动',
+  'night-seer': '夜晚-预言家查验',
+  'night-witch': '夜晚-女巫行动',
+  'day-announce': '白天-公告',
+  'day-discuss': '白天-讨论',
+  'day-vote': '白天-投票',
+  'day-execute': '白天-处决',
+  'hunter-shoot': '猎人开枪',
+  'game-over': '对局结束',
+}
 
 export interface SeerCheckRecord {
   day: number;
@@ -57,7 +69,7 @@ export interface WitchPotions {
 
 export interface GameState {
   day: number;
-  phase: Phase;
+  phase: PhaseKind;
   players: PlayerState[];
   seerChecks: SeerCheckRecord[];
   witchPotions: WitchPotions;
@@ -68,5 +80,5 @@ export type PublicEvent =
   | {type: 'speak'; day: number; speaker: PlayerId; text: string}
   | {type: 'death'; day: number; victim: PlayerId; reason: 'wolves' | 'vote' | 'poison' | 'hunter'}
   | {type: 'vote'; day: number; voter: PlayerId; target: PlayerId}
-  | {type: 'phase'; day: number; phase: Phase['kind']}
+  | {type: 'phase'; day: number; phase: PhaseKind}
   | {type: 'announce'; day: number; text: string}

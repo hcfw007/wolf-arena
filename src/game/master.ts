@@ -6,6 +6,7 @@ import {GameRecorder} from '../recorder.js'
 import {
   Faction,
   GameState,
+  PHASE_LABEL_CN,
   PlayerId,
   PlayerState,
   PublicEvent,
@@ -35,7 +36,7 @@ export class GameMaster {
     this.recorder?.start(opts.players)
     this.state = {
       day: 0,
-      phase: {kind: 'night-wolves'},
+      phase: 'night-wolves',
       players: opts.players.map((p) => ({...p})),
       seerChecks: [],
       witchPotions: {heal: true, poison: true},
@@ -76,7 +77,7 @@ export class GameMaster {
       if (sinceDay !== undefined && ev.day < sinceDay) continue
       switch (ev.type) {
         case 'phase':
-          lines.push(`【第 ${ev.day} 天 ${this.phaseLabel(ev.phase)}】`)
+          lines.push(`【第 ${ev.day} 天 ${PHASE_LABEL_CN[ev.phase]}】`)
           break
         case 'speak': {
           const p = this.byId(ev.speaker)
@@ -109,27 +110,6 @@ export class GameMaster {
     return lines.join('\n')
   }
 
-  private phaseLabel(kind: string): string {
-    switch (kind) {
-      case 'night-wolves':
-        return '夜晚-狼人行动'
-      case 'night-seer':
-        return '夜晚-预言家查验'
-      case 'night-witch':
-        return '夜晚-女巫行动'
-      case 'day-announce':
-        return '白天-公告'
-      case 'day-discuss':
-        return '白天-讨论'
-      case 'day-vote':
-        return '白天-投票'
-      case 'day-execute':
-        return '白天-处决'
-      default:
-        return kind
-    }
-  }
-
   private privateInfoFor(id: PlayerId): string {
     const me = this.byId(id)
     const lines: string[] = [`你的身份：${ROLE_LABEL_CN[me.role]}。`]
@@ -149,8 +129,6 @@ export class GameMaster {
     }
     return lines.join('\n')
   }
-
-  private justSaved = new Set<PlayerId>()
 
   private checkWinner(): Faction | null {
     const aliveWolves = this.aliveByRole('werewolf').length
@@ -172,10 +150,11 @@ export class GameMaster {
 
       const killedTonight = await this.runWolvesPhase()
       await this.runSeerPhase()
-      const poisoned = await this.runWitchPhase(killedTonight)
+      const {poisoned, saved} = await this.runWitchPhase(killedTonight)
 
+      this.state.phase = 'day-announce'
       const deaths: PlayerId[] = []
-      const killedByWolves = killedTonight !== null && !this.justSaved.has(killedTonight) ? killedTonight : null
+      const killedByWolves = killedTonight !== null && !saved ? killedTonight : null
       if (killedByWolves !== null) {
         this.byId(killedByWolves).alive = false
         deaths.push(killedByWolves)
@@ -194,7 +173,6 @@ export class GameMaster {
           this.logPublic({type: 'death', day, victim: shot, reason: 'hunter'})
         }
       }
-      this.justSaved.clear()
 
       if (deaths.length === 0) {
         this.logPublic({type: 'announce', day, text: `第 ${day} 天，昨夜平安夜。`})
@@ -226,6 +204,7 @@ export class GameMaster {
       await this.runDiscussPhase()
       const executed = await this.runVotePhase()
       if (executed !== null) {
+        this.state.phase = 'day-execute'
         this.byId(executed).alive = false
         this.logPublic({type: 'death', day, victim: executed, reason: 'vote'})
         if (this.verbose) {
@@ -248,6 +227,7 @@ export class GameMaster {
   }
 
   private async runWolvesPhase(): Promise<PlayerId | null> {
+    this.state.phase = 'night-wolves'
     const wolves = this.aliveByRole('werewolf')
     if (wolves.length === 0) return null
     if (this.verbose) console.log(chalk.gray('\n[夜晚] 狼人行动中...'))
@@ -338,6 +318,7 @@ export class GameMaster {
   }
 
   private async runSeerPhase(): Promise<void> {
+    this.state.phase = 'night-seer'
     const seer = this.aliveByRole('seer')[0]
     if (!seer) return
     if (this.verbose) console.log(chalk.gray('\n[夜晚] 预言家查验中...'))
@@ -361,11 +342,16 @@ export class GameMaster {
     }
   }
 
-  private async runWitchPhase(killedTonight: PlayerId | null): Promise<PlayerId | null> {
+  private async runWitchPhase(killedTonight: PlayerId | null): Promise<{
+    poisoned: PlayerId | null;
+    saved: boolean;
+  }> {
+    this.state.phase = 'night-witch'
     const witch = this.aliveByRole('witch')[0]
-    if (!witch) return null
+    if (!witch) return {poisoned: null, saved: false}
     if (this.verbose) console.log(chalk.gray('\n[夜晚] 女巫行动中...'))
 
+    let saved = false
     if (killedTonight !== null && this.state.witchPotions.heal && killedTonight !== witch.id) {
       const dec = await this.agent(witch.id).witchSaveDecision({
         killedTonight: this.byId(killedTonight),
@@ -374,7 +360,7 @@ export class GameMaster {
       })
       if (dec.choice) {
         this.state.witchPotions.heal = false
-        this.justSaved.add(killedTonight)
+        saved = true
         if (this.verbose) console.log(chalk.dim(`  女巫使用解药救 ${killedTonight}号`))
         this.recorder?.witchSave(true, killedTonight)
       } else {
@@ -395,14 +381,15 @@ export class GameMaster {
         this.state.witchPotions.poison = false
         if (this.verbose) console.log(chalk.dim(`  女巫使用毒药毒 ${out.choice}号`))
         this.recorder?.witchPoison(out.choice)
-        return out.choice
+        return {poisoned: out.choice, saved}
       }
       this.recorder?.witchPoison(null)
     }
-    return null
+    return {poisoned: null, saved}
   }
 
   private async runDiscussPhase(): Promise<void> {
+    this.state.phase = 'day-discuss'
     const day = this.state.day
     this.logPublic({type: 'phase', day, phase: 'day-discuss'})
     if (this.verbose) console.log(chalk.cyan('\n[白天] 讨论开始'))
@@ -430,6 +417,7 @@ export class GameMaster {
   }
 
   private async runVotePhase(): Promise<PlayerId | null> {
+    this.state.phase = 'day-vote'
     const day = this.state.day
     if (this.verbose) console.log(chalk.cyan('\n[白天] 投票'))
     const candidates = this.alive()
@@ -468,6 +456,7 @@ export class GameMaster {
     if (dead.role !== 'hunter') return null
     const candidates = this.alive()
     if (candidates.length === 0) return null
+    this.state.phase = 'hunter-shoot'
     if (this.verbose) console.log(chalk.magenta(`\n[猎人] ${dead.id}号(${dead.name}) 出局，是否开枪？`))
     const publicHistory = this.renderPublicHistory()
     const out = await this.agent(deadId).chooseTarget({
@@ -501,7 +490,7 @@ export class GameMaster {
   }
 
   private endGame(winner: Faction): Faction {
-    this.state.phase = {kind: 'game-over', winner}
+    this.state.phase = 'game-over'
     if (this.verbose) {
       console.log(
         chalk.bgGreen.black(`\n========== 游戏结束：${winner === 'wolves' ? '狼人' : '好人'}阵营胜利 ==========`),
