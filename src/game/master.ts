@@ -146,7 +146,6 @@ export class GameMaster {
       const day = this.state.day
       if (this.verbose) console.log(chalk.bgBlue.white(`\n========== 第 ${day} 天 ==========`))
       this.recorder?.dayHeader(day)
-      this.recorder?.nightSection()
 
       const killedTonight = await this.runWolvesPhase()
       await this.runSeerPhase()
@@ -393,7 +392,6 @@ export class GameMaster {
     const day = this.state.day
     this.logPublic({type: 'phase', day, phase: 'day-discuss'})
     if (this.verbose) console.log(chalk.cyan('\n[白天] 讨论开始'))
-    this.recorder?.discussHeader()
     for (const p of this.alive()) {
       const out = await this.agent(p.id).speak({
         alivePlayers: this.alive(),

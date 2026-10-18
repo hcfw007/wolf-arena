@@ -93,9 +93,11 @@ export interface GameState {
   publicLog: PublicEvent[];
 }
 
+export type DeathReason = 'wolves' | 'vote' | 'poison' | 'hunter'
+
 export type PublicEvent =
   | {type: 'speak'; day: number; speaker: PlayerId; text: string}
-  | {type: 'death'; day: number; victim: PlayerId; reason: 'wolves' | 'vote' | 'poison' | 'hunter'}
+  | {type: 'death'; day: number; victim: PlayerId; reason: DeathReason}
   | {type: 'vote'; day: number; voter: PlayerId; target: PlayerId}
   | {type: 'phase'; day: number; phase: PhaseKind}
   | {type: 'announce'; day: number; text: string}
