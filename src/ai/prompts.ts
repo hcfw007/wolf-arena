@@ -1,4 +1,4 @@
-import {PlayerState, Role, ROLE_LABEL_CN, SeerCheckRecord} from '../game/types.js'
+import {PlayerState, Role, SeerCheckRecord} from '../game/types.js'
 
 export const ROLE_GUIDE: Record<Role, string> = {
   werewolf:
@@ -66,8 +66,4 @@ export function formatSeerHistory(checks: SeerCheckRecord[], players: PlayerStat
       return `第${c.day}晚查验 ${name} → ${cn}`
     })
     .join('；')
-}
-
-export function describeRoleSummary(role: Role): string {
-  return ROLE_LABEL_CN[role]
 }
