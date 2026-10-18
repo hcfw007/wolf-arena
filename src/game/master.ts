@@ -4,6 +4,7 @@ import {formatSeerHistory} from '../ai/prompts.js'
 import {LLMProvider} from '../providers/types.js'
 import {GameRecorder} from '../recorder.js'
 import {
+  DEFAULT_WIN_CONDITION,
   Faction,
   GameState,
   PHASE_LABEL_CN,
@@ -13,7 +14,9 @@ import {
   ROLE_FACTION,
   ROLE_LABEL_CN,
   Role,
+  WinCondition,
 } from './types.js'
+import {evaluateWinner} from './winner.js'
 
 const SPEECH_MAX_CHARS = 80
 
@@ -22,6 +25,7 @@ export interface GameMasterOpts {
   provider: LLMProvider;
   verbose?: boolean;
   recorder?: GameRecorder;
+  winCondition?: WinCondition;
 }
 
 export class GameMaster {
@@ -29,10 +33,12 @@ export class GameMaster {
   agents = new Map<PlayerId, AIPlayer>()
   private verbose: boolean
   private recorder?: GameRecorder
+  private winCondition: WinCondition
 
   constructor(opts: GameMasterOpts) {
     this.verbose = opts.verbose ?? true
     this.recorder = opts.recorder
+    this.winCondition = opts.winCondition ?? DEFAULT_WIN_CONDITION
     this.recorder?.start(opts.players)
     this.state = {
       day: 0,
@@ -131,13 +137,7 @@ export class GameMaster {
   }
 
   private checkWinner(): Faction | null {
-    const aliveWolves = this.aliveByRole('werewolf').length
-    const aliveVillagers = this.alive().filter(
-      (p) => ROLE_FACTION[p.role] === 'villagers',
-    ).length
-    if (aliveWolves === 0) return 'villagers'
-    if (aliveWolves >= aliveVillagers) return 'wolves'
-    return null
+    return evaluateWinner(this.state.players, this.winCondition)
   }
 
   async run(maxDays = 8): Promise<Faction> {

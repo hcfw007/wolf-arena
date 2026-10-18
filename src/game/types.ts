@@ -23,6 +23,21 @@ export const ROLE_LABEL_CN: Record<Role, string> = {
   hunter: '猎人',
 }
 
+export type RoleKind = 'wolf' | 'god' | 'villager'
+
+export const ROLE_KIND: Record<Role, RoleKind> = {
+  werewolf: 'wolf',
+  villager: 'villager',
+  seer: 'god',
+  witch: 'god',
+  hunter: 'god',
+}
+
+export type WinCondition = 'edge' | 'city'
+
+/** 9 人局标准是屠边：杀光神职或杀光平民。 */
+export const DEFAULT_WIN_CONDITION: WinCondition = 'edge'
+
 export type PlayerId = number
 
 export interface PlayerState {
