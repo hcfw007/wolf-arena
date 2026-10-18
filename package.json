@@ -4,10 +4,14 @@
   "description": "AI 狼人杀：9 个 LLM 互相欺骗、推理、投票的开源对战引擎",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
     "start": "tsx src/cli.ts",
     "smoke": "tsx src/smoke.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix"
