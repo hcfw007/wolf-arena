@@ -42,6 +42,11 @@ export function skipTarget(): string {
   return '<thinking>先按兵不动</thinking>\nTARGET: none'
 }
 
+/** 不带 <thinking> 段的原始输出，用于覆盖 thinking 回退分支 */
+export function rawTarget(id: number): string {
+  return `TARGET: ${id}`
+}
+
 export function voteFor(id: number): string {
   return `<thinking>投出这一票</thinking>\nVOTE: ${id}`
 }
@@ -102,13 +107,14 @@ export function createGame(opts: {
   players: PlayerState[];
   script: GameScript | MockHandler;
   recorder?: GameRecorder;
+  verbose?: boolean;
 }): TestGame {
   const handler = typeof opts.script === 'function' ? opts.script : scriptedHandler(opts.script)
   const provider = new MockProvider(handler)
   const master = new GameMaster({
     players: opts.players,
     provider: asGameProvider(provider),
-    verbose: false,
+    verbose: opts.verbose ?? false,
     recorder: opts.recorder,
   })
   return {master, provider}
