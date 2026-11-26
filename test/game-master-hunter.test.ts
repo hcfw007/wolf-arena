@@ -59,6 +59,37 @@ describe('猎人开枪决策 - master 路径', () => {
     }
   })
 
+  it('猎人被处决后 verbose 关闭时静默不开枪', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const {master, provider} = createGame({
+        players: makePlayers([
+          [1, 'werewolf'],
+          [2, 'villager'],
+          [3, 'villager'],
+          [4, 'hunter'],
+        ]),
+        script: {
+          kills: {1: 2},
+          votes: {1: 4, 3: 4, 4: 3},
+          hunterTarget: null,
+        },
+        verbose: false,
+      })
+
+      await master.run(1)
+
+      expect(provider.requests.map((r) => r.kind)).toContain('hunter')
+      expect(logSpy).not.toHaveBeenCalled()
+      expect(eventsOfType(master, 'death')).toEqual([
+        {type: 'death', day: 1, victim: 2, reason: 'wolves'},
+        {type: 'death', day: 1, victim: 4, reason: 'vote'},
+      ])
+    } finally {
+      logSpy.mockRestore()
+    }
+  })
+
   it('猎人出局时场上无存活玩家则跳过开枪', async () => {
     const {master, provider} = createGame({
       players: makePlayers([[1, 'hunter']]),

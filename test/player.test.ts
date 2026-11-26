@@ -78,6 +78,38 @@ describe('AIPlayer.chooseTarget 目标选择容错', () => {
   })
 })
 
+describe('AIPlayer 候选列表极端路径', () => {
+  const baseOpts = {publicHistory: '', privateInfo: '', day: 1}
+
+  it('vote 无有效候选人（候选为空）时抛错', async () => {
+    const agent = createAgent(me, voteFor(3))
+    await expect(agent.vote({...baseOpts, candidates: []})).rejects.toThrow(
+      'No valid vote candidate',
+    )
+  })
+
+  it('vote 有效候选人全被过滤（候选仅剩自己）时抛错', async () => {
+    const agent = createAgent(me, voteFor(1))
+    await expect(agent.vote({...baseOpts, candidates: [me]})).rejects.toThrow(
+      'No valid vote candidate',
+    )
+  })
+
+  it('chooseTarget 无候选且不允许跳过时抛错', async () => {
+    const agent = createAgent(me, target(3))
+    await expect(
+      agent.chooseTarget({...baseOpts, candidates: [], instruction: '测试指令'}),
+    ).rejects.toThrow('No valid target')
+  })
+
+  it('chooseTarget 无候选但允许跳过时返回 null 不抛错', async () => {
+    const agent = createAgent(me, skipTarget())
+    await expect(
+      agent.chooseTarget({...baseOpts, candidates: [], instruction: '测试指令', allowSkip: true}),
+    ).resolves.toMatchObject({choice: null})
+  })
+})
+
 describe('AIPlayer.witchSaveDecision 解药决策容错', () => {
   const saveOpts = {killedTonight: others[0]!, privateInfo: '', day: 1}
 

@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 
-import {createGame, eventsOfType, makePlayers} from './helpers/fixtures.js'
+import {createGame, eventsOfType, makePlayers, skipTarget} from './helpers/fixtures.js'
 
 const dayPlayers = () =>
   makePlayers([[1, 'werewolf'], [2, 'witch'], [3, 'villager'], [4, 'seer']])
@@ -101,5 +101,20 @@ describe('白天阶段 - 投票计票', () => {
 
     expect(eventsOfType(master, 'death')).toEqual([])
     expect(master.state.players.every((p) => p.alive)).toBe(true)
+  })
+
+  // run() 判胜检查保证进入投票时至少 3 人存活，此分支仅在直接调用退化场景下可达，
+  // 与猎人「无存活目标跳过开枪」同为防御性退化语义，用直调用例钉住行为
+  it('无存活玩家时记空票并无人出局（退化场景直调）', async () => {
+    const {master} = createGame({
+      players: makePlayers([[1, 'villager']]),
+      script: () => skipTarget(),
+    })
+    master.state.players.forEach((p) => {
+      p.alive = false
+    })
+
+    await expect(master['runVotePhase']()).resolves.toBeNull()
+    expect(eventsOfType(master, 'vote')).toHaveLength(0)
   })
 })
