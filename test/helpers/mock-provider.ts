@@ -2,8 +2,8 @@ import type {
   ChatMessage,
   CompleteOptions,
   CompleteResult,
-  DeepSeekProvider,
-} from '../../src/providers/deepseek.js'
+  LLMProvider,
+} from '../../src/providers/types.js'
 
 export type MockRequestKind =
   | 'speak'
@@ -19,11 +19,16 @@ export type MockRequestKind =
 export interface MockRequest {
   kind: MockRequestKind;
   playerId: number;
+  /** 从 prompt 提取的对局天数（发言/投票取「第 N 天」，夜晚决策取「第 N 晚」）。 */
+  day: number;
   system: string;
   user: string;
 }
 
 export type MockHandler = (request: MockRequest) => string
+
+const PLAYER_ID_RE = /你是 (\d+) 号/
+const DAY_RE = /第 (\d+) [晚天]/
 
 /**
  * 结构化识别 AIPlayer 发出的请求类型。
@@ -32,10 +37,10 @@ export type MockHandler = (request: MockRequest) => string
 function classifyRequest(messages: ChatMessage[]): MockRequest {
   const system = messages[0]?.content ?? ''
   const user = messages[1]?.content ?? ''
-  const idMatch = /你是 (\d+) 号/.exec(system)
   return {
     kind: kindOfSystem(system),
-    playerId: Number(idMatch?.[1] ?? Number.NaN),
+    playerId: Number(PLAYER_ID_RE.exec(system)?.[1] ?? Number.NaN),
+    day: Number(DAY_RE.exec(user)?.[1] ?? Number.NaN),
     system,
     user,
   }
@@ -56,8 +61,9 @@ function kindOfSystem(system: string): MockRequestKind {
 
 /**
  * 离线可跑的 LLM 假实现：按请求类型返回脚本化输出，绝不触网。
+ * 实现远端 LLMProvider 接口，可直接注入 GameMaster。
  */
-export class MockProvider {
+export class MockProvider implements LLMProvider {
   readonly requests: MockRequest[] = []
   totals = {promptTokens: 0, completionTokens: 0, calls: 0}
 
@@ -72,11 +78,4 @@ export class MockProvider {
     this.totals.calls += 1
     return {text, promptTokens: 10, completionTokens: 20}
   }
-}
-
-/**
- * GameMasterOpts.provider 是具体类（含私有字段，名义类型），mock 只能经由受控断言传入。
- */
-export function asGameProvider(provider: MockProvider): DeepSeekProvider {
-  return provider as unknown as DeepSeekProvider
 }

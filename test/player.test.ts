@@ -3,7 +3,7 @@ import {describe, expect, it} from 'vitest'
 import {AIPlayer} from '../src/ai/player.js'
 import type {PlayerState} from '../src/game/types.js'
 import {makePlayers, saveDecision, skipTarget, target, voteFor} from './helpers/fixtures.js'
-import {asGameProvider, type MockHandler, MockProvider} from './helpers/mock-provider.js'
+import {type MockHandler, MockProvider} from './helpers/mock-provider.js'
 
 const players = makePlayers([[1, 'werewolf'], [2, 'villager'], [3, 'villager']])
 const me = players[0]!
@@ -11,7 +11,7 @@ const others = players.slice(1)
 
 function createAgent(player: PlayerState, output: string | MockHandler): AIPlayer {
   const handler: MockHandler = typeof output === 'function' ? output : () => output
-  return new AIPlayer(player, asGameProvider(new MockProvider(handler)))
+  return new AIPlayer(player, new MockProvider(handler))
 }
 
 describe('AIPlayer.vote 计票输入容错', () => {
@@ -130,5 +130,21 @@ describe('AIPlayer.witchSaveDecision 解药决策容错', () => {
   it('乱输出默认不救', async () => {
     const agent = createAgent(me, '今晚先不折腾了。')
     await expect(agent.witchSaveDecision(saveOpts)).resolves.toMatchObject({choice: false})
+  })
+})
+
+describe('AIPlayer.speak 发言裁剪', () => {
+  it('把超长发言硬截到 maxChars + 10', async () => {
+    const agent = createAgent(me, `<thinking>x</thinking>\n<speech>${'话'.repeat(80)}</speech>`)
+    const out = await agent.speak({
+      alivePlayers: players,
+      publicHistory: '',
+      privateInfo: '',
+      currentDay: 1,
+      round: 1,
+      maxChars: 10,
+    })
+    expect(out.speech).toHaveLength(20)
+    expect(out.speech.endsWith('…')).toBe(true)
   })
 })

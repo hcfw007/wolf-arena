@@ -1,7 +1,7 @@
 import {GameMaster} from '../../src/game/master.js'
-import type {PlayerState, PublicEvent, Role} from '../../src/game/types.js'
+import type {PlayerState, PublicEvent, Role, WinCondition} from '../../src/game/types.js'
 import type {GameRecorder} from '../../src/recorder.js'
-import {type MockHandler, type MockRequest, MockProvider, asGameProvider} from './mock-provider.js'
+import {type MockHandler, type MockRequest, MockProvider} from './mock-provider.js'
 
 export function makePlayers(spec: ReadonlyArray<readonly [number, Role]>): PlayerState[] {
   return spec.map(([id, role]) => ({
@@ -22,8 +22,8 @@ export interface GameScript {
   wolfFinals?: Record<number, number>;
   /** 预言家查验目标 */
   seerTarget?: Record<number, number>;
-  /** 女巫是否用解药，默认不救 */
-  witchSave?: boolean;
+  /** 女巫是否用解药，默认不救；按天指定时传 {天数: 是否救} */
+  witchSave?: boolean | Record<number, boolean>;
   /** 女巫毒杀目标，默认不用毒 */
   witchPoison?: number | null;
   /** 猎人开枪目标，默认不开枪 */
@@ -32,6 +32,8 @@ export interface GameScript {
   speeches?: Record<number, string>;
   /** 投票目标；缺省输出非法 VOTE 触发 AIPlayer 回退分支 */
   votes?: Record<number, number>;
+  /** 顺序票脚本：每次投票请求按顺序取一个目标，用于构造平票进 PK、PK 重投等多轮票型 */
+  voteScript?: number[];
 }
 
 export function target(id: number): string {
@@ -69,7 +71,7 @@ export function scriptedHandler(script: GameScript): MockHandler {
       case 'seer':
         return target(requireEntry(script.seerTarget, req, '预言家查验'))
       case 'witchSave':
-        return saveDecision(script.witchSave ?? false)
+        return saveDecision(resolveWitchSave(script.witchSave, req.day))
       case 'witchPoison':
         return typeof script.witchPoison === 'number' ? target(script.witchPoison) : skipTarget()
       case 'hunter':
@@ -77,13 +79,20 @@ export function scriptedHandler(script: GameScript): MockHandler {
       case 'speak':
         return speech(script.speeches?.[req.playerId] ?? '我是好人，跟着逻辑走。')
       case 'vote': {
-        const choice = script.votes?.[req.playerId]
-        return voteFor(choice ?? 999)
+        const scripted = script.voteScript?.shift()
+        if (scripted !== undefined) return voteFor(scripted)
+        return voteFor(script.votes?.[req.playerId] ?? 999)
       }
       case 'chooseTarget':
         throw new Error('GameMaster 不应发出通用 chooseTarget 请求，请检查阶段分类')
     }
   }
+}
+
+function resolveWitchSave(spec: GameScript['witchSave'], day: number): boolean {
+  if (spec === undefined) return false
+  if (typeof spec === 'boolean') return spec
+  return spec[day] ?? false
 }
 
 function requireEntry(
@@ -108,14 +117,16 @@ export function createGame(opts: {
   script: GameScript | MockHandler;
   recorder?: GameRecorder;
   verbose?: boolean;
+  winCondition?: WinCondition;
 }): TestGame {
   const handler = typeof opts.script === 'function' ? opts.script : scriptedHandler(opts.script)
   const provider = new MockProvider(handler)
   const master = new GameMaster({
     players: opts.players,
-    provider: asGameProvider(provider),
+    provider,
     verbose: opts.verbose ?? false,
     recorder: opts.recorder,
+    winCondition: opts.winCondition,
   })
   return {master, provider}
 }
