@@ -19,7 +19,7 @@ function requestDay(user: string): string {
 }
 
 describe('公共历史渲染 - 多日全流程', () => {
-  it('四类死亡文案、sinceDay 过滤与女巫毒药状态按天正确渲染', async () => {
+  it('三类中立死亡文案（死因不外露）、sinceDay 过滤与女巫毒药状态按天正确渲染', async () => {
     const handler: MockHandler = (req) => {
       const day = requestDay(req.user)
       switch (req.kind) {
@@ -76,8 +76,10 @@ describe('公共历史渲染 - 多日全流程', () => {
     const day2Proposal = provider.requests.find(
       (r) => r.kind === 'wolvesRound1' && r.user.includes('第 2 晚'),
     )
-    expect(day2Proposal?.system).toContain('系统：3号(玩家3) 昨夜倒牌。')
-    expect(day2Proposal?.system).toContain('系统：10号(玩家10) 昨夜被毒。')
+    // 新行为：公开信息不暴露死亡原因——狼刀与毒杀统一渲染为「昨夜倒牌出局」
+    expect(day2Proposal?.system).toContain('系统：3号(玩家3) 昨夜倒牌出局。')
+    expect(day2Proposal?.system).toContain('系统：10号(玩家10) 昨夜倒牌出局。')
+    expect(day2Proposal?.system).not.toContain('昨夜被毒')
     expect(day2Proposal?.system).toContain('系统：6号(玩家6) 被猎人开枪带走。')
     expect(day2Proposal?.system).toContain('系统：7号(玩家7) 被投票出局。')
 
@@ -95,7 +97,7 @@ describe('公共历史渲染 - 多日全流程', () => {
 })
 
 describe('公共历史渲染 - 文案单元', () => {
-  it('渲染全部阶段标签、发言、投票、公告与四种死亡文案', () => {
+  it('渲染全部十个阶段标签、发言、投票、公告与中立死因文案', () => {
     const {master} = createGame({
       players: makePlayers([
         [1, 'werewolf'],
@@ -112,8 +114,10 @@ describe('公共历史渲染 - 文案单元', () => {
       {type: 'phase', day: 1, phase: 'day-announce'},
       {type: 'phase', day: 1, phase: 'day-discuss'},
       {type: 'phase', day: 1, phase: 'day-vote'},
+      {type: 'phase', day: 1, phase: 'day-pk'},
       {type: 'phase', day: 1, phase: 'day-execute'},
       {type: 'phase', day: 1, phase: 'hunter-shoot'},
+      {type: 'phase', day: 1, phase: 'game-over'},
       {type: 'speak', day: 1, speaker: 1, text: '发言内容'},
       {type: 'death', day: 1, victim: 1, reason: 'wolves'},
       {type: 'death', day: 1, victim: 2, reason: 'vote'},
@@ -131,13 +135,16 @@ describe('公共历史渲染 - 文案单元', () => {
     expect(rendered).toContain('【第 1 天 白天-公告】')
     expect(rendered).toContain('【第 1 天 白天-讨论】')
     expect(rendered).toContain('【第 1 天 白天-投票】')
+    expect(rendered).toContain('【第 1 天 白天-平票 PK】')
     expect(rendered).toContain('【第 1 天 白天-处决】')
-    // phaseLabel 未列举的阶段回落原样输出
-    expect(rendered).toContain('【第 1 天 hunter-shoot】')
+    expect(rendered).toContain('【第 1 天 猎人开枪】')
+    expect(rendered).toContain('【第 1 天 对局结束】')
     expect(rendered).toContain('1号(玩家1)：发言内容')
-    expect(rendered).toContain('系统：1号(玩家1) 昨夜倒牌。')
+    // 新行为：狼刀与毒杀不可区分，统一「昨夜倒牌出局」；死因只保留在复盘里
+    expect(rendered).toContain('系统：1号(玩家1) 昨夜倒牌出局。')
     expect(rendered).toContain('系统：2号(玩家2) 被投票出局。')
-    expect(rendered).toContain('系统：3号(玩家3) 昨夜被毒。')
+    expect(rendered).toContain('系统：3号(玩家3) 昨夜倒牌出局。')
+    expect(rendered).not.toContain('昨夜被毒')
     expect(rendered).toContain('系统：4号(玩家4) 被猎人开枪带走。')
     expect(rendered).toContain('1号 → 2号')
     expect(rendered).toContain('系统：公告内容')

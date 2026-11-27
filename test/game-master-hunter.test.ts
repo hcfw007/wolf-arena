@@ -24,7 +24,7 @@ describe('猎人开枪决策 - master 路径', () => {
       {type: 'death', day: 1, victim: 3, reason: 'wolves'},
       {type: 'death', day: 1, victim: 2, reason: 'hunter'},
     ])
-    // 开枪带走 2 号后仅剩 1 狼 1 好人，屠城判定狼人胜利
+    // 开枪带走 2 号后仅剩 1 狼 1 神职，平民全灭，屠边判定狼人胜利
     expect(winner).toBe('wolves')
   })
 

@@ -11,7 +11,7 @@ import {
   target,
   voteFor,
 } from './helpers/fixtures.js'
-import {type MockHandler, MockProvider, asGameProvider} from './helpers/mock-provider.js'
+import {type MockHandler, MockProvider} from './helpers/mock-provider.js'
 
 let logSpy: ReturnType<typeof vi.spyOn>
 
@@ -40,7 +40,7 @@ describe('verbose 控制台输出', () => {
         [3, 'villager'],
         [4, 'seer'],
       ]),
-      provider: asGameProvider(provider),
+      provider,
     })
 
     await master.run(1)
@@ -52,7 +52,9 @@ describe('verbose 控制台输出', () => {
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('  2号(玩家2) 出局'))
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[白天] 讨论开始'))
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[白天] 投票'))
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('平票，无人出局'))
+    // 旧「平票，无人出局」一条日志已拆成：进 PK + PK 后仍平票
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('平票（1、3、4号），进入 PK'))
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('PK 后仍然平票，无人出局'))
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('游戏结束：狼人阵营胜利'))
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('身份揭晓：'))
   })

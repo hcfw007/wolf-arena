@@ -21,7 +21,8 @@ describe('白天阶段 - 发言', () => {
     await master.run(1)
 
     const speaks = eventsOfType(master, 'speak')
-    expect(speaks.map((s) => s.speaker)).toEqual([1, 2, 3, 4])
+    // 平票进 PK 后平票者会追加发言：讨论轮 [1,2,3,4] + PK 发言 [3,4]
+    expect(speaks.map((s) => s.speaker)).toEqual([1, 2, 3, 4, 3, 4])
     expect(speaks[3]?.text).toBe('我是预言家，昨晚查了 1 号。')
   })
 
@@ -68,7 +69,7 @@ describe('白天阶段 - 投票计票', () => {
     expect(master.state.players.find((p) => p.id === 3)?.alive).toBe(false)
   })
 
-  it('平票时无人出局', async () => {
+  it('平票进 PK 重投仍然平票时无人出局', async () => {
     const {master} = createGame({
       players: dayPlayers(),
       script: {
@@ -81,7 +82,9 @@ describe('白天阶段 - 投票计票', () => {
 
     await master.run(1)
 
-    expect(eventsOfType(master, 'vote')).toHaveLength(4)
+    // 旧「平票直接无人出局」语义已改为平票进 PK：首轮 4 票 + PK 重投 4 票
+    expect(eventsOfType(master, 'vote')).toHaveLength(8)
+    expect(eventsOfType(master, 'phase').map((p) => p.phase)).toContain('day-pk')
     expect(eventsOfType(master, 'death')).toEqual([])
     expect(master.state.players.every((p) => p.alive)).toBe(true)
   })
